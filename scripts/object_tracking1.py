@@ -69,16 +69,25 @@ class ObjectTracker():
         min_hsv_orange = np.array([5, 80, 80])
         max_hsv_orange = np.array([15, 255, 255])
         binary = cv2.inRange(hsv, min_hsv_orange, max_hsv_orange)
-        kernel = np.ones((7,7),np.uint8)
+        # 遅いが円形のカーネル
+        # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
+        # 速いが矩形のカーネル
+        kernel = np.ones((7, 7), np.uint8)
         binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations = 3)
+        center_img = self.detect_center(binary)
         
-        self.monitor(binary)
+        self.monitor(center_img)
         #cv2.imwrite("/tmp/image.jpg", org)
 
-    #def detect_center(self, binary):
+    def detect_center(self, binary):
+        _, contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        center_img = cv2.drawContours(binary, contours, -1, (0, 255, 0), 20)
+        center_img = cv2.cvtColor(center_img, cv2.COLOR_GRAY2RGB)
+        #cv2.imwrite("/tmp/image.jpg", center_img)
+        return center_img
 
     def monitor(self, org):
-        self.pub.publish(self.bridge.cv2_to_imgmsg(org, "mono8"))
+        self.pub.publish(self.bridge.cv2_to_imgmsg(org, "rgb8"))
 
 
         return "detected"
