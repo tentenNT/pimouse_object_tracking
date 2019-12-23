@@ -4,6 +4,8 @@
 # 上田本のフェイストラッキングを参考にクラスをまるごと書き換える
 # カスケード分類器を作るのは失敗したので，色相からボールを抽出して重心を求める
 # 隙間はモルフォロジーで埋める
+
+
 import rospy, cv2
 import numpy as np
 from sensor_msgs.msg import Image
@@ -66,31 +68,46 @@ class ObjectTracker():
         org = self.image_org
         hsv = cv2.cvtColor(org, cv2.COLOR_BGR2HSV)
 
-        min_hsv_orange = np.array([5, 80, 80])
-        max_hsv_orange = np.array([15, 255, 255])
+        # HSV色空間を用いてオレンジ色を抽出
+        min_hsv_orange = np.array([5, 80, 30])
+        max_hsv_orange = np.array([25, 255, 255])
         binary = cv2.inRange(hsv, min_hsv_orange, max_hsv_orange)
         # 遅いが円形のカーネル
         # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
         # 速いが矩形のカーネル
-        kernel = np.ones((7, 7), np.uint8)
-        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations = 3)
+        kernel = np.ones((5, 5), np.uint8)
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations = 2)
         center_img = self.detect_center(binary)
         
         self.monitor(center_img)
         #cv2.imwrite("/tmp/image.jpg", org)
 
+    # 2値画像の輪郭からモーメントを求める
     def detect_center(self, binary):
-        _, contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        center_img = cv2.drawContours(binary, contours, -1, (0, 255, 0), 20)
-        center_img = cv2.cvtColor(center_img, cv2.COLOR_GRAY2RGB)
-        #cv2.imwrite("/tmp/image.jpg", center_img)
+        _, contours, hierarchy = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        center_img = cv2.drawContours(self.image_org, contours, -1, (0, 255, 0), 5)
+        max_area = 0
+        max_area_num = 0
+        # 最大面積のインデックスを求める
+        for i, cnt in enumerate(contours):
+                area = cv2.contourArea(cnt)
+                if(max_area < area):
+                    max_area = area
+                    max_area_num = i
+        print("max_area: {}".format(max_area))
+        if(max_area != 0):
+            M = cv2.moments(contours[max_area_num])
+            cog_x = int(M['m10'] / M['m00'])
+            cog_y = int(M['m01'] / M['m00'])
+            center_img = cv2.circle(center_img, (cog_x, cog_y), 15, (255, 0, 0), thickness=-1) 
         return center_img
 
     def monitor(self, org):
-        self.pub.publish(self.bridge.cv2_to_imgmsg(org, "rgb8"))
+        self.pub.publish(self.bridge.cv2_to_imgmsg(org, "bgr8"))
 
 
         return "detected"
+
 if __name__ == '__main__':
     rospy.init_node('object_tracking')
     ot = ObjectTracker()
